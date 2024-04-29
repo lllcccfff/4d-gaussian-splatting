@@ -12,20 +12,20 @@
 from typing import NamedTuple
 import torch.nn as nn
 import torch
-# from . import _C
+from diff_gaussian_rasterization import _C
 import os
 from torch.utils.cpp_extension import load
-parent_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "diff-gaussian-rasterization")
-_C = load(
-    name='diff_gaussian_rasterization',
-    extra_cuda_cflags=["-I " + os.path.join(parent_dir, "third_party/glm/"), "-g"],
-    sources=[
-        os.path.join(parent_dir, "cuda_rasterizer/rasterizer_impl.cu"),
-        os.path.join(parent_dir, "cuda_rasterizer/forward.cu"),
-        os.path.join(parent_dir, "cuda_rasterizer/backward.cu"),
-        os.path.join(parent_dir, "rasterize_points.cu"),
-        os.path.join(parent_dir, "ext.cpp")],
-    verbose=True)
+# parent_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "diff-gaussian-rasterization")
+# _C = load(
+#     name='diff_gaussian_rasterization',
+#     extra_cuda_cflags=["-I " + os.path.join(parent_dir, "third_party/glm/"), "-g"],
+#     sources=[
+#         os.path.join(parent_dir, "cuda_rasterizer/rasterizer_impl.cu"),
+#         os.path.join(parent_dir, "cuda_rasterizer/forward.cu"),
+#         os.path.join(parent_dir, "cuda_rasterizer/backward.cu"),
+#         os.path.join(parent_dir, "rasterize_points.cu"),
+#         os.path.join(parent_dir, "ext.cpp")],
+#     verbose=True)
 
 def cpu_deep_copy_tuple(input_tuple):
     copied_tensors = [item.cpu().clone() if isinstance(item, torch.Tensor) else item for item in input_tuple]
@@ -125,17 +125,16 @@ class _RasterizeGaussians(torch.autograd.Function):
                 raise ex
         else:
             num_rendered, color, flow, depth, T, radii, geomBuffer, binningBuffer, imgBuffer, covs_com = _C.rasterize_gaussians(*args)
-
         # Keep relevant tensors for backward
         ctx.raster_settings = raster_settings
         ctx.num_rendered = num_rendered
         ctx.save_for_backward(colors_precomp, means3D, scales, rotations, cov3Ds_precomp, radii, sh, 
                                 flow_2d, opacities, ts, scales_t, rotations_r,
                                 geomBuffer, binningBuffer, imgBuffer)
-        return color, radii, depth, 1-T, flow, covs_com
+        return color, radii, depth, 1-T, flow, covs_com, num_rendered
 
     @staticmethod
-    def backward(ctx, grad_out_color, grad_radii, grad_depth, grad_alpha, grad_flow, grad_covs_com):
+    def backward(ctx, grad_out_color, grad_radii, grad_depth, grad_alpha, grad_flow, grad_covs_com, waste):
 
         # Restore necessary values from context
         num_rendered = ctx.num_rendered

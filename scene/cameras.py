@@ -53,8 +53,8 @@ class Camera:
         if not self.meta_only:
             if gt_alpha_mask is not None:
                 self.image *= gt_alpha_mask.to(self.image.device)
-            else:
-                self.image *= torch.ones((1, self.image_height, self.image_width), device=self.image.device)
+            # else:
+            #     self.image *= torch.ones((1, self.image_height, self.image_width), device=self.image.device)
 
         self.zfar = 100.0
         self.znear = 0.01

@@ -28,6 +28,7 @@ import numpy as np
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from torch.utils.data import DataLoader
+from waymo_loader import load_waymo_data
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -42,8 +43,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    gaussians = GaussianModel(dataset.sh_degree, gaussian_dim=gaussian_dim, time_duration=time_duration, rot_4d=rot_4d, force_sh_3d=force_sh_3d, sh_degree_t=2 if pipe.eval_shfs_4d else 0)
-    scene = Scene(dataset, gaussians, num_pts=num_pts, num_pts_ratio=num_pts_ratio, time_duration=time_duration)
+    # if source_path include waymo data
+    if "waymo" in dataset.source_path:
+        gaussians, scene = load_waymo_data(dataset.source_path, args)
+    else:
+        gaussians = GaussianModel(dataset.sh_degree, gaussian_dim=gaussian_dim, time_duration=time_duration, rot_4d=rot_4d, force_sh_3d=force_sh_3d, sh_degree_t=2 if pipe.eval_shfs_4d else 0)
+        scene = Scene(dataset, gaussians, num_pts=num_pts, num_pts_ratio=num_pts_ratio, time_duration=time_duration)
+    
     gaussians.training_setup(opt)
     
     if checkpoint:
@@ -102,7 +108,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             
             for batch_idx in range(batch_size):
                 gt_image, viewpoint_cam = batch_data[batch_idx]
-                gt_image = gt_image.cuda()
+                gt_image = gt_image.cuda() / 255.0
                 viewpoint_cam = viewpoint_cam.cuda()
 
                 render_pkg = render(viewpoint_cam, gaussians, pipe, background)
@@ -209,6 +215,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                             ema_loss = vars()[f"ema_{lambda_name.replace('lambda_', '')}_for_log"]
                             postfix[lambda_name.replace("lambda_", "L")] = f"{ema_loss:.{4}f}"
                             
+                    print("render_num:", render_pkg["rendered_num"], " points:", scene.gaussians.get_xyz.shape[0])
                     progress_bar.set_postfix(postfix)
                     progress_bar.update(10)
                 if iteration == opt.iterations:
@@ -310,7 +317,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 msssim_test = 0.0
                 for idx, batch_data in enumerate(tqdm(config['cameras'])):
                     gt_image, viewpoint = batch_data
-                    gt_image = gt_image.cuda()
+                    gt_image = gt_image.cuda() / 255.0
                     viewpoint = viewpoint.cuda()
                     
                     render_pkg = renderFunc(viewpoint, scene.gaussians, *renderArgs)
@@ -350,6 +357,7 @@ def setup_seed(seed):
      random.seed(seed)
      torch.backends.cudnn.deterministic = True
 
+#python train.py --config configs/dnerf/standup.yaml 
 if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")

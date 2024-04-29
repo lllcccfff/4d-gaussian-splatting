@@ -145,7 +145,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             flow_2d = flow_2d[mask]
     
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
-    rendered_image, radii, depth, alpha, flow, covs_com = rasterizer(
+    rendered_image, radii, depth, alpha, flow, covs_com, rendered_num = rasterizer(
         means3D = means3D,
         means2D = means2D,
         shs = shs,
@@ -188,4 +188,5 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             "radii": radii_all,
             "depth": depth,
             "alpha": alpha,
-            "flow": flow}
+            "flow": flow,
+            "rendered_num": rendered_num,}
