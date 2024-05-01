@@ -25,12 +25,14 @@ from utils.graphics_utils import getWorld2View2, getProjectionMatrix, getProject
 
 # class RenderScene4DGS(RenderScene):
 class RenderScene4DGS:
-    def __init__(self, gaussians, pipeline, background, viewSet, render_fn, fixed):
+    def __init__(self, gaussians, pipeline, background, viewSet, render_fn, mode, fixed):
         self.gaussians = gaussians
         self.pipeline = pipeline
         self.background = background
         self.render_fn = render_fn
         self.fixed = fixed
+        self.mode = mode
+
         self.frameCnt = 0
 
         self.viewDir = 0
@@ -63,28 +65,25 @@ class RenderScene4DGS:
         else:
             self.view.timestamp = time_duration * ((t / time_duration) % 1) + self.gaussians.time_duration[0]
         rendered = self.render_fn(self.view, self.gaussians, self.pipeline, self.background)["render"]
-        # rendered = self.render_fn(self.view, self.gaussians, self.pipeline, self.background)["depth"].detach()[0]
-        print(rendered)
-        # rendered = rendered/(rendered + 1.0) * 16_777_216
-        # rendered = rendered.to(torch.int32)
-        # image = self.decimal_to_256(rendered)
-        # rgb_image = torch.stack(image, dim=-1).cpu().numpy()
-        # rendered = rendered.cpu().numpy() 
-        # normalized_depth = (rendered - np.min(rendered)) / (np.max(rendered) - np.min(rendered))
-        # rgb_image = cv2.applyColorMap(np.uint8(normalized_depth * 255), cv2.COLORMAP_JET)
-        image = rendered
-        image = image * 255
-        image = image.to(torch.uint8)
-        image = image.permute(1, 2, 0)
-        image = image.cpu()
-        # image = image.numpy()
-        # return image        
-        gt_image = self.view.image.permute(1, 2, 0).cpu()
-        delta_image = ((image - gt_image)/2.0 + 128.5).to(torch.uint8)
-        delta_image = delta_image.numpy()
-
-        concat_image = np.concatenate((image.numpy(), gt_image.numpy(), delta_image), axis=1)
-        rgb_image = cv2.cvtColor(concat_image, cv2.COLOR_BGR2RGB)
+        if self.mode in [1, 3, 4]:
+            image = rendered
+            image = image * 255
+            image = image.to(torch.uint8)
+            image = image.permute(1, 2, 0)
+            image = image.cpu()       
+            gt_image = self.view.image.permute(1, 2, 0).cpu()
+            concat_image = np.concatenate((image.numpy(), gt_image.numpy()), axis=1)
+            rgb_image = cv2.cvtColor(concat_image, cv2.COLOR_BGR2RGB)
+        elif self.mode == 2 :
+            rendered = self.render_fn(self.view, self.gaussians, self.pipeline, self.background)["depth"].detach()[0]
+            # rendered = rendered/(rendered + 1.0) * 16_777_216
+            # rendered = rendered.to(torch.int32)
+            # image = self.decimal_to_256(rendered)
+            # rgb_image = torch.stack(image, dim=-1).cpu().numpy()
+            rendered = rendered.cpu().numpy() 
+            normalized_depth = (rendered - np.min(rendered)) / (np.max(rendered) - np.min(rendered))
+            rgb_image = cv2.applyColorMap(np.uint8(normalized_depth * 255), cv2.COLORMAP_JET)
+    
         return rgb_image
     
     def setView(self, i):
@@ -95,13 +94,11 @@ class RenderScene4DGS:
             init_view.T = torch.from_numpy(init_view.T).float()
         
         init_view = init_view.cuda()
-        if init_view.image_width != self.width:
+        if init_view.image_width != self.width or init_view.image_height != self.height:
             init_view.image_width = self.width
-            init_view.image = TF.resize(init_view.image, (self.height, self.width))
-            #resize gt_image
-
-        if init_view.image_height != self.height:
+            init_view.focal_x = math.tan(init_view.FoVx / 2.0) / 2.0 * init_view.image_width
             init_view.image_height = self.height
+            init_view.focal_y = math.tan(init_view.FoVy / 2.0) / 2.0 * init_view.image_height
             init_view.image = TF.resize(init_view.image, (self.height, self.width))
 
         self.view = init_view
@@ -147,22 +144,27 @@ class RenderScene4DGS:
     def setViewSize(self, image_width, image_height):
         self.width = image_width
         self.height = image_height
+        self.view.image_width = image_width
+        self.view.focal_x = math.tan(self.view.FoVx / 2.0) / 2.0 * image_width
+        self.view.image_height = image_height
+        self.view.focal_y = math.tan(self.view.FoVy / 2.0) / 2.0 * image_height
+        self.view.image = TF.resize(self.view.image, (image_height, image_width))
+        
 
 class MainWindow(QMainWindow):
-    def __init__(self, *args, fixed=False):
+    def __init__(self, *args, fixed):
         super().__init__()
         self.setWindowTitle('3D Browser with PyQt')
         self.image_label = QLabel(self)
         self.setCentralWidget(self.image_label)
         self.image_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
 
-        self.renderScene = RenderScene4DGS(*args, fixed=fixed)
-        
+        self.renderScene = RenderScene4DGS(*args, fixed)
         self.fixed = fixed
         self.moving_speed = 0.2
         self.angel_speed = 0.1
         self.fov_speed = 0.05
-        self.resize(self.renderScene.view.image_width * 3, self.renderScene.view.image_height)
+        self.resize(self.renderScene.view.image_width * 2, self.renderScene.view.image_height)
 
         self.last_mouse_position = None
         self.mouse_type = None
@@ -274,7 +276,7 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         image_width = self.image_label.width()
         image_height = self.image_label.height()
-        self.renderScene.setViewSize(image_width // 3, image_height)
+        self.renderScene.setViewSize(image_width // 2, image_height)
         super().resizeEvent(event)
             
 

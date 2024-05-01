@@ -29,8 +29,13 @@ python train.py --config configs/waymo/xxx.yaml
 
 **Render**:
 ```shell
-python render.py --config configs/waymo/xxx.yaml --pth output_path/xxx/chkpnt_best.pth
+python render.py --config configs/waymo/xxx.yaml --pth output_path/xxx/chkpnt_best.pth --mode 0
 ```
-
-> If necessary, i would develop a convenient way to switch different mode before render. (point cloud/depth map/fix camera and trace/free camera)
+mode:
+0: nto assigned error
+1: point cloud
+2: depth map
+3: fix camera and trace
+4: free camera
+5: output fix camera trace
 
