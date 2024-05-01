@@ -26,8 +26,6 @@ from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
 import os
-from viewer import viewer
-from PyQt5.QtWidgets import QApplication, QMainWindow
 import sys
 import numpy as np
 
@@ -51,7 +49,7 @@ def launch(dataset : ModelParams, pipeline : PipelineParams, args):
             gaussians = GaussianModel(dataset.sh_degree, gaussian_dim=args.gaussian_dim, time_duration=args.time_duration, rot_4d=args.rot_4d, force_sh_3d=args.force_sh_3d, sh_degree_t=2 if pipeline.eval_shfs_4d else 0)
             scene = Scene(dataset, gaussians, shuffle=False)
         (model_params, first_iter) = torch.load(args.pth)
-        gaussians.restore(model_params, args)
+        # gaussians.restore(model_params, args)
 
         if args.mode == 1:
             points = model_params[1].cpu()
@@ -62,6 +60,8 @@ def launch(dataset : ModelParams, pipeline : PipelineParams, args):
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
         if args.mode in [1, 2, 3, 4]:
+            from viewer import viewer
+            from PyQt5.QtWidgets import QApplication, QMainWindow
             app = QApplication(sys.argv)
             window = viewer.MainWindow(gaussians, pipeline, background, scene.getTrainCameras(), render, args.mode, fixed=fixed)
             return app, window

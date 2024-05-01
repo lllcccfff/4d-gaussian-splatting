@@ -1,9 +1,9 @@
 gaussian_dim: 4
 time_duration: [0.0, 20.0]
-num_pts: 300_000
+num_pts: 200_000
 num_pts_ratio: 1.0
 rot_4d: True
-force_sh_3d: False
+force_sh_3d: True
 batch_size: 8
 exhaust_test: True
 

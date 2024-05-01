@@ -82,11 +82,21 @@ class SceneWaymo(Scene):
         print("[Loaded] cameras")
 
         #gaussian
-        selected_frame = 0
-        homo_points = np.concatenate([lidar[selected_frame]['points'], np.ones((lidar[selected_frame]['points'].shape[0], 1))], axis=1)
-        for i in range(homo_points.shape[0]):
-            homo_points[i] = ego_pose[selected_frame] @ homo_points[i]
-        points = homo_points[:, :3] / homo_points[:, 3, None]
+        use_one_frame = False
+        if use_one_frame:
+            selected_frame = 0
+            homo_points = np.concatenate([lidar[selected_frame]['points'], np.ones((lidar[selected_frame]['points'].shape[0], 1))], axis=1)
+            homo_points = homo_points @ ego_pose[selected_frame].T
+            points = homo_points[:, :3] / homo_points[:, 3, None]
+        else:
+            all_frame_points = []
+            for frame in range(frame_num):
+                homo_points = np.concatenate([lidar[frame]['points'], np.ones((lidar[frame]['points'].shape[0], 1))], axis=1)
+                homo_points = homo_points @ ego_pose[frame].T
+                points = homo_points[:, :3] / homo_points[:, 3, None]
+                all_frame_points.append(points)
+            points = np.concatenate(all_frame_points)
+                
         if points.shape[0] > args.num_pts:
             mask = np.random.randint(0, points.shape[0], args.num_pts)
             points = points[mask]
