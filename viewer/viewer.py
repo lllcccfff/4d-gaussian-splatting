@@ -59,7 +59,7 @@ class RenderScene4DGS:
     def __call__(self, t):
         time_duration = self.gaussians.time_duration[1] - self.gaussians.time_duration[0]
         if self.fixed:
-            self.frameCnt %= 995
+            self.frameCnt %= len(self.viewSet)
             self.setView(self.frameCnt + self.viewDir)
             self.frameCnt += 5 
         else:

@@ -21,4 +21,4 @@ eggs/
 .eggs/
 *.egg
 *.sh
-video.mp4
+*.mp4
