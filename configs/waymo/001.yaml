@@ -54,6 +54,6 @@ OptimizationParams:
   densify_until_num_points: -1
   final_prune_from_iter: -1
   sh_increase_interval: 1000
-  lambda_opa_mask: 0.0
+  lambda_opa_mask: 0.05
   lambda_rigid: 0.0
   lambda_motion: 0.0

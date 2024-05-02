@@ -124,7 +124,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 ###### opa mask Loss ######
                 if opt.lambda_opa_mask > 0:
                     o = alpha.clamp(1e-6, 1-1e-6)
-                    sky = 1 - viewpoint_cam.gt_alpha_mask
+                    sky = 1 - viewpoint_cam.gt_alpha_mask / 255.0
 
                     Lopa_mask = (- sky * torch.log(1 - o)).mean()
 

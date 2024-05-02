@@ -11,7 +11,7 @@ from utils.graphics_utils import BasicPointCloud
 from utils.camera_utils import cameraList_from_camInfos
 
 class SceneWaymo(Scene):
-    def __init__(self, gaussians: GaussianModel, args, waymo_raw_pkg, shuffle=True, resize_ratio=0.5, test=False):
+    def __init__(self, gaussians: GaussianModel, args, waymo_raw_pkg, shuffle=True, resize_ratio=1, test=False):
         self.model_path = args.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
@@ -20,7 +20,7 @@ class SceneWaymo(Scene):
         self.test_cameras = {}
         self.cameras_extent = None
 
-        ego_pose, lidar, images, intrinsics, extrinsics = waymo_raw_pkg["ego_pose"], waymo_raw_pkg["lidar"], waymo_raw_pkg["images"], waymo_raw_pkg["intrinsics"], waymo_raw_pkg["extrinsics"]
+        ego_pose, lidar, images, intrinsics, extrinsics, sky_masks = waymo_raw_pkg["ego_pose"], waymo_raw_pkg["lidar"], waymo_raw_pkg["images"], waymo_raw_pkg["intrinsics"], waymo_raw_pkg["extrinsics"], waymo_raw_pkg["sky_mask"]
         frame_num = len(images)
 
         train_cameras_raw = []
@@ -32,8 +32,7 @@ class SceneWaymo(Scene):
 
         for i in range(frame_num):
             timestamp = (args.time_duration[1] - args.time_duration[0]) / frame_num * i + args.time_duration[0]
-            for j in range(5):
-                fx, fy, cx, cy, k1, k2, p1, p2, k3 = intrinsics[j]
+            for j in range(3):
                 # --------------undistort----------------
                 # distorted_img = images[i][j]
                 # cameraMatrix = np.array([[fx, 0, cx],
@@ -49,12 +48,15 @@ class SceneWaymo(Scene):
                 # #norm_ud_img =  (undistorted_img / 255.0).astype(np.float32)
                 # pil_img = Image.fromarray(undistorted_img)
                 # --------------distort----------------
-                pil_img = Image.fromarray(images[i][j])
+                pil_img = Image.fromarray(np.concatenate([images[i][j], sky_masks[i][j][..., 0:1]], axis=2))
+                # pil_img = Image.fromarray(images[i][j])
+                width, height = pil_img.size
+                fl_x, fl_y, cx, cy, k1, k2, p1, p2, k3 = intrinsics[j]
 
-                width, height = pil_img.size
-                pil_img = pil_img.resize((int(width * resize_ratio), int(height * resize_ratio)), Image.Resampling.LANCZOS)
-                width, height = pil_img.size
-                fl_x, fl_y, cx, cy = fx * resize_ratio, fy * resize_ratio, cx * resize_ratio, cy * resize_ratio
+                if resize_ratio != 1:
+                    pil_img = pil_img.resize((int(width * resize_ratio), int(height * resize_ratio)), Image.Resampling.LANCZOS)
+                    width, height = pil_img.size
+                    fl_x, fl_y, cx, cy = fl_x * resize_ratio, fl_y * resize_ratio, cx * resize_ratio, cy * resize_ratio
                 FovX, FovY = 2 * np.arctan(width / (2 * fl_x)), 2 * np.arctan(height / (2 * fl_y))
 
                 c2w = ego_pose[i] @ extrinsics[j] @ opencv2waymo # e2w * e2waymo * opencv2waymo
@@ -76,7 +78,7 @@ class SceneWaymo(Scene):
             random.shuffle(train_cameras_raw)
             random.shuffle(test_camera_raw)
 
-        self.cameras_extent = nerf_normalization["radius"]
+        self.cameras_extent = nerf_normalization["radius"] * 10
         self.train_cameras[args.resolution] = cameraList_from_camInfos(train_cameras_raw, args.resolution, args)
         self.test_cameras[args.resolution] = cameraList_from_camInfos(test_camera_raw, args.resolution, args)
         print("[Loaded] cameras")

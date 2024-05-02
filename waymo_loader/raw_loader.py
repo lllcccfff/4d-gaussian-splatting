@@ -70,6 +70,23 @@ def load_extrinsics(extrinsics_dir):
             extrinsics.append(matrix)
     return extrinsics #ego to world
 
+def load_sky_masks(sky_masks_dir):
+    files = [f for f in os.listdir(sky_masks_dir) if f.endswith('.png') and "_" in f]
+    num_groups = len(set(f.split('_')[0] for f in files))
+    num_variants = len([f for f in files if f.startswith('000_')])
+    np_images = np.empty((num_groups, num_variants), dtype=object)
+    images_pth = []
+
+    for file in files:
+        fp = os.path.join(sky_masks_dir, file)
+        img = cv2.imread(fp) # h, w, c
+        group_index, variant_index = map(int, file.split('.')[0].split('_'))
+        np_images[group_index, variant_index] = img
+        images_pth.append(file)
+
+    images = [np_images[i] for i in range(np_images.shape[0])]
+    return images, images_pth #h, w, 3 (0: black, 255: white(sky) )
+
 def load_waymo_raw(base_dir):
     ego_pose = load_ego_pose(os.path.join(base_dir, "ego_pose"))
     print("[Loaded] ego_pose")
@@ -81,13 +98,15 @@ def load_waymo_raw(base_dir):
     print("[Loaded] intrinsics")
     extrinsics = load_extrinsics(os.path.join(base_dir, "extrinsics"))
     print("[Loaded] extrinsics")
-
+    sky_masks, mask_pth = load_sky_masks(os.path.join(base_dir, "sky_masks"))
+    print("[Loaded] sky_masks")
     return {
         "ego_pose": ego_pose,
         "lidar": lidar,
         "images": images,
         "intrinsics": intrinsics,
         "extrinsics": extrinsics,
-        "otthers": None
+        "sky_mask": sky_masks,
+        "others": None
     }
     
