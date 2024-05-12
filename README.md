@@ -7,9 +7,9 @@ CLI
 conda create -n $env_name python=$version
 # install torch with correct version
 pip install -r requirements.txt
-pip install diff-gaussian-rasterization
-pip install pointops2
-pip install simple-knn
+pip install ./diff-gaussian-rasterization
+pip install ./pointops2
+pip install ./simple-knn
 ```
 
 ## Setup
@@ -37,5 +37,9 @@ mode:
 2: depth map
 3: fix camera and trace
 4: free camera
-5: output fix camera trace
+5: save fix camera trace
+6: save depth map trace
+7: evaluate metrics 
 
+## Remain two addition
+parameterlize frameNum, dirNum, pcdInit, use_sky_mask

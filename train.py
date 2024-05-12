@@ -28,7 +28,7 @@ import numpy as np
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from torch.utils.data import DataLoader
-from waymo_loader import load_waymo_data
+from waymo_loader import load_waymo_data, load_street_waymo_data
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -45,7 +45,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     tb_writer = prepare_output_and_logger(dataset)
     # if source_path include waymo data
     if "waymo" in dataset.source_path:
-        gaussians, scene = load_waymo_data(dataset.source_path, args)
+        gaussians, scene = load_street_waymo_data(dataset.source_path, args)
     else:
         gaussians = GaussianModel(dataset.sh_degree, gaussian_dim=gaussian_dim, time_duration=time_duration, rot_4d=rot_4d, force_sh_3d=force_sh_3d, sh_degree_t=2 if pipe.eval_shfs_4d else 0)
         scene = Scene(dataset, gaussians, num_pts=num_pts, num_pts_ratio=num_pts_ratio, time_duration=time_duration)
@@ -110,6 +110,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 gt_image, viewpoint_cam = batch_data[batch_idx]
                 gt_image = gt_image.cuda() / 255.0
                 viewpoint_cam = viewpoint_cam.cuda()
+                if opt.lambda_opa_mask > 0:
+                    gt_image *= 1 - viewpoint_cam.gt_alpha_mask / 255.0 # gt_alpha_mask (0: object, 255: sky)
 
                 render_pkg = render(viewpoint_cam, gaussians, pipe, background)
                 image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
@@ -124,7 +126,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 ###### opa mask Loss ######
                 if opt.lambda_opa_mask > 0:
                     o = alpha.clamp(1e-6, 1-1e-6)
-                    sky = 1 - viewpoint_cam.gt_alpha_mask / 255.0
+                    sky = viewpoint_cam.gt_alpha_mask / 255.0
 
                     Lopa_mask = (- sky * torch.log(1 - o)).mean()
 

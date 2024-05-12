@@ -25,13 +25,14 @@ from utils.graphics_utils import getWorld2View2, getProjectionMatrix, getProject
 
 # class RenderScene4DGS(RenderScene):
 class RenderScene4DGS:
-    def __init__(self, gaussians, pipeline, background, viewSet, render_fn, mode, fixed):
+    def __init__(self, gaussians, pipeline, background, viewSet, render_fn, mode, dirNum, fixed):
         self.gaussians = gaussians
         self.pipeline = pipeline
         self.background = background
         self.render_fn = render_fn
         self.fixed = fixed
         self.mode = mode
+        self.dirNum = dirNum
 
         self.frameCnt = 0
 
@@ -61,10 +62,11 @@ class RenderScene4DGS:
         if self.fixed:
             self.frameCnt %= len(self.viewSet)
             self.setView(self.frameCnt + self.viewDir)
-            self.frameCnt += 5 
+            self.frameCnt += self.dirNum
         else:
             self.view.timestamp = time_duration * ((t / time_duration) % 1) + self.gaussians.time_duration[0]
         rendered = self.render_fn(self.view, self.gaussians, self.pipeline, self.background)["render"]
+
         if self.mode in [1, 3, 4]:
             image = rendered
             image = image * 255

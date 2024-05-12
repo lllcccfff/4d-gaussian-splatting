@@ -1,6 +1,6 @@
 gaussian_dim: 4
 time_duration: [0.0, 20.0]
-num_pts: 200_000
+num_pts: 600_000
 num_pts_ratio: 1.0
 rot_4d: True
 force_sh_3d: True
@@ -9,8 +9,8 @@ exhaust_test: True
 
 ModelParams:
   sh_degree: 3
-  source_path: "data/waymo/000"
-  model_path: "output/waymo/000"
+  source_path: "data/waymo/799"
+  model_path: "output/waymo/799"
   images: "images"
   resolution: 1.0
   white_background: False
@@ -29,7 +29,7 @@ PipelineParams:
   env_map_res: 0
   env_optimize_until: 1000000000
   env_optimize_from: 0
-  eval_shfs_4d: False
+  eval_shfs_4d: True
 
 OptimizationParams:
   iterations: 30_000
