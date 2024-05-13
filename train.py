@@ -45,7 +45,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     tb_writer = prepare_output_and_logger(dataset)
     # if source_path include waymo data
     if "waymo" in dataset.source_path:
-        gaussians, scene = load_street_waymo_data(dataset.source_path, args)
+        gaussians, scene = load_waymo_data(dataset.source_path, args)
     else:
         gaussians = GaussianModel(dataset.sh_degree, gaussian_dim=gaussian_dim, time_duration=time_duration, rot_4d=rot_4d, force_sh_3d=force_sh_3d, sh_degree_t=2 if pipe.eval_shfs_4d else 0)
         scene = Scene(dataset, gaussians, num_pts=num_pts, num_pts_ratio=num_pts_ratio, time_duration=time_duration)

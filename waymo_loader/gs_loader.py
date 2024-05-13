@@ -22,7 +22,7 @@ class SceneWaymo(Scene):
 
         ego_pose, lidar, images, intrinsics, extrinsics, sky_masks = waymo_raw_pkg["ego_pose"], waymo_raw_pkg["lidar"], waymo_raw_pkg["images"], waymo_raw_pkg["intrinsics"], waymo_raw_pkg["extrinsics"], waymo_raw_pkg["sky_mask"]
         frame_num = len(images)
-        frame_num = 100
+    
         train_cameras_raw = []
         test_camera_raw = []
         opencv2waymo = np.array([[0, 0, 1, 0], 
@@ -48,8 +48,8 @@ class SceneWaymo(Scene):
                 # #norm_ud_img =  (undistorted_img / 255.0).astype(np.float32)
                 # pil_img = Image.fromarray(undistorted_img)
                 # --------------distort----------------
-                pil_img = Image.fromarray(np.concatenate([images[i][j], sky_masks[i][j][..., 0:1]], axis=2))
-                # pil_img = Image.fromarray(images[i][j])
+                #pil_img = Image.fromarray(np.concatenate([images[i][j], sky_masks[i][j][..., 0:1]], axis=2))
+                pil_img = Image.fromarray(images[i][j])
                 width, height = pil_img.size
                 fl_x, fl_y, cx, cy, k1, k2, p1, p2, k3 = intrinsics[j]
 

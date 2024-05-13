@@ -119,14 +119,14 @@ def distributeTask(dataset : ModelParams, pipeline : PipelineParams, args, dirNu
     
     with torch.no_grad():
         if "waymo" in args.source_path:
-            gaussians, scene = load_street_waymo_data(args.source_path, args, test=True)
+            gaussians, scene = load_waymo_data(args.source_path, args, test=True)
         else:
             gaussians = GaussianModel(dataset.sh_degree, gaussian_dim=args.gaussian_dim, time_duration=args.time_duration, rot_4d=args.rot_4d, force_sh_3d=args.force_sh_3d, sh_degree_t=2 if pipeline.eval_shfs_4d else 0)
             scene = Scene(dataset, gaussians, shuffle=False)
-        # (model_params, first_iter) = torch.load(args.pth)
-        # print("iter: ", first_iter)
-        # gaussians.restore(model_params, args)
-        model_params = None
+        (model_params, first_iter) = torch.load(args.pth)
+        print("iter: ", first_iter)
+        gaussians.restore(model_params, args)
+        # model_params = None
 
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
