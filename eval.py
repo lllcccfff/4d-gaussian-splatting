@@ -83,7 +83,7 @@ def eval_metrics(gaussians, pipeline, background, scene, dirNum):
             gt = gt / 255.0
             if cam.gt_alpha_mask is not None:
                 gt *= 1 - cam.gt_alpha_mask / 255.0
-            if frameCnt % 10 == 0:
+            if (frameCnt // dirNum + 1) % 10 == 0:
                 test_metrics["psnr"].append(psnr(rendered, gt))
                 test_metrics["ssim"].append(ssim(rendered, gt))
                 test_metrics["lpips"].append(lpips(rendered, gt))

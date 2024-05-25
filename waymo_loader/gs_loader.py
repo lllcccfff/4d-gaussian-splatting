@@ -22,7 +22,7 @@ class SceneWaymo(Scene):
 
         ego_pose, lidar, images, intrinsics, extrinsics, sky_masks = waymo_raw_pkg["ego_pose"], waymo_raw_pkg["lidar"], waymo_raw_pkg["images"], waymo_raw_pkg["intrinsics"], waymo_raw_pkg["extrinsics"], waymo_raw_pkg["sky_mask"]
         frame_num = len(images)
-    
+        frame_num = 100
         train_cameras_raw = []
         test_camera_raw = []
         opencv2waymo = np.array([[0, 0, 1, 0], 
@@ -32,7 +32,7 @@ class SceneWaymo(Scene):
 
         for i in range(frame_num):
             timestamp = (args.time_duration[1] - args.time_duration[0]) / frame_num * i + args.time_duration[0]
-            for j in range(3):
+            for j in range(1):
                 # --------------undistort----------------
                 # distorted_img = images[i][j]
                 # cameraMatrix = np.array([[fx, 0, cx],

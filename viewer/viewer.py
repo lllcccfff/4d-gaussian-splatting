@@ -69,6 +69,7 @@ class RenderScene4DGS:
 
         if self.mode in [1, 3, 4]:
             image = rendered
+            image = torch.clamp(image, 0, 1)
             image = image * 255
             image = image.to(torch.uint8)
             image = image.permute(1, 2, 0)
