@@ -29,8 +29,11 @@ import os
 import sys
 import numpy as np
 
+import math
+
 from utils.graphics_utils import BasicPointCloud
 from waymo_loader import load_waymo_data, load_street_waymo_data
+from viewer.camera import CameraOffset
 
 def realtime_rendering(gaussians, model_params, background, scene, dirNum, fixed=False):        
     if args.mode == 1:
@@ -43,24 +46,63 @@ def realtime_rendering(gaussians, model_params, background, scene, dirNum, fixed
         from viewer import viewer
         from PyQt5.QtWidgets import QApplication, QMainWindow
         app = QApplication(sys.argv)
-        window = viewer.MainWindow(gaussians, pipeline, background, scene.getTrainCameras(), render, args.mode, dirNum, fixed=fixed)
-        return app, window
+        window = viewer.MainWindow(gaussians, pipeline, background, scene.getTrainCameras(), render, dirNum, mode=args.mode, fixed=fixed)
+        return app, window, scene.getTrainCameras()[0][1]
     
 def record_rendering(gaussians, pipeline, background, scene, dirNum):
-    viewDir = 1
+    def setView(view):
+        from utils.graphics_utils import getWorld2View2, getProjectionMatrix, getProjectionMatrixCenterShift
+        if cameraOffset is not None:
+            novel_view = view
+            novel_view.R = (cameraOffset.R @ torch.from_numpy(view.R.T).float()).T
+            novel_view.camera_center += cameraOffset.camera_center
+            novel_view.T = - novel_view.R.transpose(0,1) @ novel_view.camera_center
+            Rt = torch.zeros((4, 4))
+            Rt[:3, :3] = novel_view.R.transpose(0,1)
+            Rt[:3, 3] = novel_view.T
+            Rt[3, 3] = 1.0
+            novel_view.world_view_transform = Rt.transpose(0, 1)
+
+            focal_x = math.tan(view.FoVx / 2.0) / 2.0 * view.image_width
+            focal_y = math.tan(view.FoVy / 2.0) / 2.0 * view.image_height
+            ratio = focal_y / focal_x
+            focal_x += cameraOffset.focal_x
+            focal_y += cameraOffset.focal_x * ratio
+
+            novel_view.image_height = cameraOffset.height
+            novel_view.image_width = cameraOffset.width
+            novel_view.FoVx = math.atan(focal_x / novel_view.image_width * 2.0) * 2.0
+            novel_view.FoVy = math.atan(focal_y / novel_view.image_height * 2.0) * 2.0
+
+            if novel_view.cx > 0:
+                novel_view.projection_matrix = getProjectionMatrixCenterShift(novel_view.znear, novel_view.zfar, novel_view.cx, novel_view.cy, novel_view.fl_x, novel_view.fl_y, novel_view.image_width, novel_view.image_height).transpose(0,1)
+            else:
+                novel_view.projection_matrix = getProjectionMatrix(znear=novel_view.znear, zfar=novel_view.zfar, fovX=novel_view.FoVx, fovY=novel_view.FoVy).transpose(0,1)
+            novel_view.full_proj_transform = (novel_view.world_view_transform.unsqueeze(0).bmm(novel_view.projection_matrix.unsqueeze(0))).squeeze(0) # full projection transform
+            
+        return novel_view.cuda()
+
+
+    view_path = "view.obj"
+    cameraOffset = None
+    if os.path.exists(view_path):
+        cameraOffset = torch.load(view_path)
+
+    viewDir = args.viewDir
     assert 0 <= viewDir < dirNum
     cameraSet = scene.getTrainCameras()
     frames = []
     if args.mode == 5:
         for frameCnt in range(0, len(cameraSet), dirNum):
-            rendered = render(cameraSet[frameCnt + viewDir][1].cuda(), gaussians, pipeline, background)["render"]
+            rendered = render(setView(cameraSet[frameCnt + viewDir][1]), gaussians, pipeline, background)["render"]
+            rendered = torch.clamp(rendered, 0, 1)
             rendered = (rendered*255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
             image = cv2.cvtColor(rendered, cv2.COLOR_BGR2RGB)
             frames.append(image)
         imageio.mimsave("render_video.mp4", np.array(frames), fps=10)
     elif args.mode == 6:
         for frameCnt in range(0, len(cameraSet), dirNum):
-            rendered = render(cameraSet[frameCnt + viewDir][1].cuda(), gaussians, pipeline, background)["depth"].detach()[0]
+            rendered = render(setView(cameraSet[frameCnt + viewDir][1]), gaussians, pipeline, background)["depth"].detach()[0]
             rendered = rendered.cpu().numpy() 
             normalized_depth = (rendered - np.min(rendered)) / (np.max(rendered) - np.min(rendered))
             image = cv2.applyColorMap(np.uint8(normalized_depth * 255), cv2.COLORMAP_JET)
@@ -107,7 +149,7 @@ def eval_metrics(gaussians, pipeline, background, scene, dirNum):
         print("{:<{}} {:>0.4f} {:>0.4f} {:>0.4f}".format(row[0], column_widths[0], float(row[1]), float(row[2]), float(row[3])))
             
 
-def distributeTask(dataset : ModelParams, pipeline : PipelineParams, args, dirNum=3):
+def distributeTask(dataset : ModelParams, pipeline : PipelineParams):
     if args.mode in [2, 3, 5, 6, 7]:
         fixed = True
     elif args.mode in [1, 4]:
@@ -116,6 +158,8 @@ def distributeTask(dataset : ModelParams, pipeline : PipelineParams, args, dirNu
         raise ValueError("Error: mode not assigned")
     else:
         raise ValueError("Error: invalid mode")
+    
+    dirNum = args.camera_number
     
     with torch.no_grad():
         if "waymo" in args.source_path:
@@ -146,7 +190,11 @@ if __name__ == "__main__":
     pipeline = PipelineParams(parser)
     parser.add_argument("--config", type=str)
     parser.add_argument("--pth", type=str)
-    parser.add_argument("--mode", type=int, default=0) 
+    parser.add_argument("--mode", type=int, default=0)
+    parser.add_argument("--viewDir", type=int, default=0)
+    parser.add_argument("--frame_length", type=int, default=[0, 50])
+    parser.add_argument("--camera_number", type=int, default=1)
+    parser.add_argument("--use_skymask", type=bool, default=False)
 
     parser.add_argument("--quiet", action="store_true")
     args = get_combined_args(parser)
@@ -169,9 +217,19 @@ if __name__ == "__main__":
     safe_state(args.quiet)
 
     if args.mode not in [5, 6, 7]:
-        app, window = distributeTask(model.extract(args), pipeline.extract(args), args)
+        app, window, org_view = distributeTask(model.extract(args), pipeline.extract(args))
         window.show()
-        sys.exit(app.exec_())
+        app.exec_()
+        view = window.renderScene.view
+        camOffset = CameraOffset(
+            R = view.R.T.cpu() @ org_view.R.T.inverse(),
+            camera_center = view.camera_center.cpu() - org_view.camera_center,
+            focal_x = math.tan(view.FoVx / 2.0) / 2.0 * view.image_width - math.tan(org_view.FoVx / 2.0) / 2.0 * org_view.image_width,
+            height = view.image_height,
+            width = view.image_width
+        )
+        torch.save(camOffset, "view.obj")
+        sys.exit()
     else :
-        distributeTask(model.extract(args), pipeline.extract(args), args)
+        distributeTask(model.extract(args), pipeline.extract(args))
     

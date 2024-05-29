@@ -36,7 +36,7 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint, debug_from,
-             gaussian_dim, time_duration, num_pts, num_pts_ratio, rot_4d, force_sh_3d, batch_size):
+             gaussian_dim, time_duration, num_pts, num_pts_ratio, rot_4d, force_sh_3d, batch_size, args):
     
     if dataset.frame_ratio > 1:
         time_duration = [time_duration[0] / dataset.frame_ratio,  time_duration[1] / dataset.frame_ratio]
@@ -110,7 +110,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 gt_image, viewpoint_cam = batch_data[batch_idx]
                 gt_image = gt_image.cuda() / 255.0
                 viewpoint_cam = viewpoint_cam.cuda()
-                if opt.lambda_opa_mask > 0:
+
+                if not args.use_skymask:
+                    if opt.lambda_opa_mask != 0:
+                        assert False, "use_skymask and lambda_opa_mask must be both zero"
+                if args.use_skymask:
+                    if opt.lambda_opa_mask == 0:
+                        assert False, "use_skymask is only valid when lambda_opa_mask > 0"
                     gt_image *= 1 - viewpoint_cam.gt_alpha_mask / 255.0 # gt_alpha_mask (0: object, 255: sky)
 
                 render_pkg = render(viewpoint_cam, gaussians, pipe, background)
@@ -124,7 +130,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * Lssim
                 
                 ###### opa mask Loss ######
-                if opt.lambda_opa_mask > 0:
+                if args.use_skymask:
+                    if opt.lambda_opa_mask == 0:
+                        assert False, "use_skymask is only valid when lambda_opa_mask > 0"
                     o = alpha.clamp(1e-6, 1-1e-6)
                     sky = viewpoint_cam.gt_alpha_mask / 255.0
 
@@ -383,6 +391,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--seed", type=int, default=6666)
     parser.add_argument("--exhaust_test", action="store_true")
+    parser.add_argument("--frame_length", type=int, default=[0, 50])
+    parser.add_argument("--camera_number", type=int, default=1)
+    parser.add_argument("--use_skymask", type=bool, default=False)
     
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
@@ -410,7 +421,7 @@ if __name__ == "__main__":
 
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.start_checkpoint, args.debug_from,
-             args.gaussian_dim, args.time_duration, args.num_pts, args.num_pts_ratio, args.rot_4d, args.force_sh_3d, args.batch_size)
+             args.gaussian_dim, args.time_duration, args.num_pts, args.num_pts_ratio, args.rot_4d, args.force_sh_3d, args.batch_size, args)
 
     # All done
     print("\nTraining complete.")

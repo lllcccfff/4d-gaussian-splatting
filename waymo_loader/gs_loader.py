@@ -21,8 +21,7 @@ class SceneWaymo(Scene):
         self.cameras_extent = None
 
         ego_pose, lidar, images, intrinsics, extrinsics, sky_masks = waymo_raw_pkg["ego_pose"], waymo_raw_pkg["lidar"], waymo_raw_pkg["images"], waymo_raw_pkg["intrinsics"], waymo_raw_pkg["extrinsics"], waymo_raw_pkg["sky_mask"]
-        frame_num = len(images)
-        frame_num = 100
+        frame_num = args.frame_length
         train_cameras_raw = []
         test_camera_raw = []
         opencv2waymo = np.array([[0, 0, 1, 0], 
@@ -30,9 +29,9 @@ class SceneWaymo(Scene):
                                  [0, -1, 0, 0], 
                                  [0, 0, 0, 1]])
 
-        for i in range(frame_num):
-            timestamp = (args.time_duration[1] - args.time_duration[0]) / frame_num * i + args.time_duration[0]
-            for j in range(1):
+        for i in range(frame_num[0], frame_num[1]):
+            timestamp = (args.time_duration[1] - args.time_duration[0]) / (frame_num[1] - frame_num[0]) * i + args.time_duration[0]
+            for j in range(args.camera_number):
                 # --------------undistort----------------
                 # distorted_img = images[i][j]
                 # cameraMatrix = np.array([[fx, 0, cx],
@@ -48,8 +47,10 @@ class SceneWaymo(Scene):
                 # #norm_ud_img =  (undistorted_img / 255.0).astype(np.float32)
                 # pil_img = Image.fromarray(undistorted_img)
                 # --------------distort----------------
-                #pil_img = Image.fromarray(np.concatenate([images[i][j], sky_masks[i][j][..., 0:1]], axis=2))
-                pil_img = Image.fromarray(images[i][j])
+                if args.use_skymask:
+                    pil_img = Image.fromarray(np.concatenate([images[i][j], sky_masks[i][j][..., 0:1]], axis=2))
+                else:
+                    pil_img = Image.fromarray(images[i][j])
                 width, height = pil_img.size
                 fl_x, fl_y, cx, cy, k1, k2, p1, p2, k3 = intrinsics[j]
 
@@ -70,6 +71,7 @@ class SceneWaymo(Scene):
                 
                 if (i+1) % 10 == 0 and test is False:
                     test_camera_raw.append(camera)
+                    train_cameras_raw.append(camera)
                 else :
                     train_cameras_raw.append(camera)
 
@@ -78,7 +80,7 @@ class SceneWaymo(Scene):
             random.shuffle(train_cameras_raw)
             random.shuffle(test_camera_raw)
 
-        self.cameras_extent = nerf_normalization["radius"] * 10
+        self.cameras_extent = 200
         self.train_cameras[args.resolution] = cameraList_from_camInfos(train_cameras_raw, args.resolution, args)
         self.test_cameras[args.resolution] = cameraList_from_camInfos(test_camera_raw, args.resolution, args)
         print("[Loaded] cameras")
@@ -92,13 +94,13 @@ class SceneWaymo(Scene):
             points = homo_points[:, :3] / homo_points[:, 3, None]
         else:
             all_frame_points = []
-            for frame in range(frame_num):
+            for frame in range(frame_num[0], frame_num[1]):
                 homo_points = np.concatenate([lidar[frame]['points'], np.ones((lidar[frame]['points'].shape[0], 1))], axis=1)
                 homo_points = homo_points @ ego_pose[frame].T
                 points = homo_points[:, :3] / homo_points[:, 3, None]
                 all_frame_points.append(points)
             points = np.concatenate(all_frame_points)
-            mask = np.random.randint(0, points.shape[0], points.shape[0]//frame_num)
+            mask = np.random.randint(0, points.shape[0], points.shape[0]//(frame_num[1] - frame_num[0]))
             points = points[mask]
                 
         if points.shape[0] > args.num_pts:

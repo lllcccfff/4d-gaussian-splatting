@@ -6,6 +6,9 @@ rot_4d: True
 force_sh_3d: True
 batch_size: 8
 exhaust_test: True
+frame_length: [0, 100] #左开右闭
+camera_number: 1
+use_skymask: False
 
 ModelParams:
   sh_degree: 3

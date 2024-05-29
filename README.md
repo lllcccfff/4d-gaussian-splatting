@@ -19,7 +19,6 @@ pip install ./simple-knn
 
 3. Modify the `./config/waymo/xxx.yaml`, especially `source_path` (input) and `model_path` (output)
 
-4. Move your data
 
 ## Run
 **Train** (no implementation for load checkpoint and continue train):
@@ -29,17 +28,30 @@ python train.py --config configs/waymo/xxx.yaml
 
 **Render**:
 ```shell
-python render.py --config configs/waymo/xxx.yaml --pth output_path/xxx/chkpnt_best.pth --mode 0
+python eval.py --config configs/waymo/xxx.yaml --pth output_path/xxx/chkpntxxx.pth --mode 0 --viewDir 0
 ```
-mode:
-0: nto assigned error
-1: point cloud
-2: depth map
-3: fix camera and trace
-4: free camera
-5: save fix camera trace
-6: save depth map trace
-7: evaluate metrics 
+###### Mode:
+1. render point cloud with random color in real time
+2. render depth map in real time
+3. render training camera trace in real time
+4. render free camera in real time 
+5. save training camera trace as video
+6. save depth map as video
+7. evaluate metrics (PSNR, SSIM, LPIPS) 
 
-## Remain two addition
-parameterlize frameNum, dirNum, pcdInit, use_sky_mask
+###### Interactivation:
+Mode 1, 4 support interacitve real time rendering  
+W S A D : move forward/backward/left/right  
+Q E: move upwards/downwards  
+Hold left or right mouse: rotation  
+Roll: change focal  
+Resize window: the render resolution also resize  
+
+###### How to render novel view video:
+1. Use interacitve window and select a new view in your local computer.
+2. Close the window, and a `view.obj` file would be saved in working directory.
+3. Move the file to server working directory
+4. render with mode 5/6 
+
+
+

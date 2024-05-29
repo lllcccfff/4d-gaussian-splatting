@@ -18,14 +18,14 @@ from utils.graphics_utils import getWorld2View2, getProjectionMatrix, getProject
 #     def __call__(self, t):
 #         raise NotImplementedError
 #     @set
-#     def setViewPose(self, view):
+#     def setViewPos(self, view):
 #         self.view = view
 #     def setViewRot(self, view):
 #         self.view = view
 
 # class RenderScene4DGS(RenderScene):
 class RenderScene4DGS:
-    def __init__(self, gaussians, pipeline, background, viewSet, render_fn, mode, dirNum, fixed):
+    def __init__(self, gaussians, pipeline, background, viewSet, render_fn, dirNum, mode, fixed):
         self.gaussians = gaussians
         self.pipeline = pipeline
         self.background = background
@@ -33,7 +33,7 @@ class RenderScene4DGS:
         self.fixed = fixed
         self.mode = mode
         self.dirNum = dirNum
-
+        
         self.frameCnt = 0
 
         self.viewDir = 0
@@ -73,16 +73,16 @@ class RenderScene4DGS:
             image = image * 255
             image = image.to(torch.uint8)
             image = image.permute(1, 2, 0)
-            image = image.cpu()       
+            image = image.cpu()  
             gt_image = self.view.image.permute(1, 2, 0).cpu()
-            concat_image = np.concatenate((image.numpy(), gt_image.numpy()), axis=1)
-            rgb_image = cv2.cvtColor(concat_image, cv2.COLOR_BGR2RGB)
+            if self.mode in [3]:
+                concat_image = np.concatenate((image.numpy(), gt_image.numpy()), axis=1)
+                rgb_image = cv2.cvtColor(concat_image, cv2.COLOR_BGR2RGB)
+            elif self.mode in [1, 4]:
+                rgb_image = cv2.cvtColor(image.numpy(), cv2.COLOR_BGR2RGB)
         elif self.mode == 2 :
             rendered = self.render_fn(self.view, self.gaussians, self.pipeline, self.background)["depth"].detach()[0]
-            # rendered = rendered/(rendered + 1.0) * 16_777_216
-            # rendered = rendered.to(torch.int32)
-            # image = self.decimal_to_256(rendered)
-            # rgb_image = torch.stack(image, dim=-1).cpu().numpy()
+
             rendered = rendered.cpu().numpy() 
             normalized_depth = (rendered - np.min(rendered)) / (np.max(rendered) - np.min(rendered))
             rgb_image = cv2.applyColorMap(np.uint8(normalized_depth * 255), cv2.COLORMAP_JET)
@@ -107,9 +107,8 @@ class RenderScene4DGS:
         self.view = init_view
         print(i, self.view.image_width, self.view.image_height)
 
-    def setViewPose(self, d_camera_pose):
-        # print data type
-        self.view.T -= d_camera_pose # T
+    def setViewPos(self, d_camera_pos):
+        self.view.T -= d_camera_pos # T
         Rt = torch.zeros((4, 4), device="cuda")
         Rt[:3, :3] = self.view.R.transpose(0,1)
         Rt[:3, 3] = self.view.T
@@ -128,13 +127,13 @@ class RenderScene4DGS:
         self.view.world_view_transform = Rt.transpose(0, 1) # world view transform
         self.view.full_proj_transform = (self.view.world_view_transform.unsqueeze(0).bmm(self.view.projection_matrix.unsqueeze(0))).squeeze(0) # full projection transform
         
-    def setViewFov(self, d_fov):
+    def setViewFov(self, d_focal_x):
         view = self.view
         focal_x = math.tan(view.FoVx / 2.0) / 2.0 * view.image_width
         focal_y = math.tan(view.FoVy / 2.0) / 2.0 * view.image_height
         ratio = focal_y / focal_x
-        focal_x += d_fov
-        focal_y += d_fov * ratio
+        focal_x += d_focal_x
+        focal_y += d_focal_x * ratio
         view.FoVx = math.atan(focal_x / view.image_width * 2.0) * 2.0
         view.FoVy = math.atan(focal_y / view.image_height * 2.0) * 2.0
         if view.cx > 0:
@@ -148,26 +147,30 @@ class RenderScene4DGS:
         self.width = image_width
         self.height = image_height
         self.view.image_width = image_width
-        self.view.focal_x = math.tan(self.view.FoVx / 2.0) / 2.0 * image_width
         self.view.image_height = image_height
-        self.view.focal_y = math.tan(self.view.FoVy / 2.0) / 2.0 * image_height
         self.view.image = TF.resize(self.view.image, (image_height, image_width))
         
 
 class MainWindow(QMainWindow):
-    def __init__(self, *args, fixed):
+    def __init__(self, *args, mode, fixed):
         super().__init__()
         self.setWindowTitle('3D Browser with PyQt')
         self.image_label = QLabel(self)
         self.setCentralWidget(self.image_label)
         self.image_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
 
-        self.renderScene = RenderScene4DGS(*args, fixed)
+        self.renderScene = RenderScene4DGS(*args, mode, fixed)
+        self.mode = mode
         self.fixed = fixed
-        self.moving_speed = 0.2
-        self.angel_speed = 0.1
-        self.fov_speed = 0.05
-        self.resize(self.renderScene.view.image_width * 2, self.renderScene.view.image_height)
+        if self.mode in [3]:
+            self.resize(self.renderScene.view.image_width * 2, self.renderScene.view.image_height)
+        else:
+            self.resize(self.renderScene.view.image_width, self.renderScene.view.image_height)
+
+        # [you can modify the control sensitivity here]
+        self.moving_speed = 0.2 
+        self.angel_speed = 0.1 
+        self.fov_speed = 0.05 
 
         self.last_mouse_position = None
         self.mouse_type = None
@@ -218,7 +221,7 @@ class MainWindow(QMainWindow):
         elif key == Qt.Key_S: # +Y
             d_camera_pose[2] -= self.moving_speed
         print("Pose: ", d_camera_pose.tolist())
-        self.renderScene.setViewPose(d_camera_pose)
+        self.renderScene.setViewPos(d_camera_pose)
 
     def mousePressEvent(self, event):
         if self.fixed:
@@ -231,7 +234,6 @@ class MainWindow(QMainWindow):
             return
         self.mouse_type = None
         self.last_mouse_position = None
-
 
     def mouseMoveEvent(self, event):
         if self.fixed:
@@ -279,12 +281,9 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         image_width = self.image_label.width()
         image_height = self.image_label.height()
-        self.renderScene.setViewSize(image_width // 2, image_height)
+        if self.mode in [3]:
+            self.renderScene.setViewSize(image_width // 2, image_height)
+        else:
+            self.renderScene.setViewSize(image_width, image_height)
         super().resizeEvent(event)
             
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
