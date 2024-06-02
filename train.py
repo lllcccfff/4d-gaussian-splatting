@@ -28,7 +28,7 @@ import numpy as np
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from torch.utils.data import DataLoader
-from waymo_loader import load_waymo_data, load_street_waymo_data
+from waymo_loader import load_waymo_data
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
