@@ -9,6 +9,7 @@ exhaust_test: True
 frame_length: [0, 100] #左开右闭
 camera_number: 1
 use_skymask: False
+supervise_depth: True
 
 ModelParams:
   sh_degree: 3

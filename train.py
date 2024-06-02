@@ -13,7 +13,7 @@ import os
 import random
 import torch
 from torch import nn
-from utils.loss_utils import l1_loss, ssim, msssim
+from utils.loss_utils import l1_loss, ssim, msssim, l2_loss
 from gaussian_renderer import render
 import sys
 from scene import Scene, GaussianModel
@@ -121,7 +121,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
                 render_pkg = render(viewpoint_cam, gaussians, pipe, background)
                 image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
-                depth = render_pkg["depth"]
+                depth = render_pkg["depth"] # (1, H, W)
                 alpha = render_pkg["alpha"]
 
                 # Loss
@@ -172,6 +172,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     _, velocity = gaussians.get_current_covariance_and_mean_offset(1.0, gaussians.get_t + 0.1)
                     Lmotion = velocity.norm(p=2, dim=1).mean()
                     loss = loss + opt.lambda_motion * Lmotion
+                ########################
+
+                ###### depth loss ######
+                opt.lambda_depth = 0.1
+                if opt.lambda_depth > 0:
+                    mask = viewpoint_cam.depth_map > 0
+                    Ldepth = l2_loss(depth[mask], viewpoint_cam.depth_map[mask])
+                    loss = loss + opt.lambda_depth * Ldepth
                 ########################
 
                 loss = loss / batch_size
@@ -394,6 +402,7 @@ if __name__ == "__main__":
     parser.add_argument("--frame_length", type=int, default=[0, 50])
     parser.add_argument("--camera_number", type=int, default=1)
     parser.add_argument("--use_skymask", type=bool, default=False)
+    parser.add_argument("--supervise_depth", type=bool, default=False)
     
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)

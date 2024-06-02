@@ -87,6 +87,19 @@ def load_sky_masks(sky_masks_dir):
     images = [np_images[i] for i in range(np_images.shape[0])]
     return images, images_pth #h, w, 3 (0: black, 255: white(sky) )
 
+def load_SfM_clouds(SfM_clouds_dir):
+    xyzs, rgbs = [], []
+    if os.path.exists(SfM_clouds_dir):
+        with open(SfM_clouds_dir, "r") as f:
+            lines = f.readlines()
+            for line in lines:
+                if len(line) > 0 and line[0] != "#":
+                    elems = line.split()
+                    xyzs.append(torch.tensor(tuple(map(float, elems[1:4]))))
+                    rgbs.append(torch.tensor(tuple(map(int, elems[4:7]))))
+        return [torch.stack(xyzs, dim=0), torch.stack(rgbs, dim=0)]
+    return None
+
 def load_waymo_raw(base_dir):
     ego_pose = load_ego_pose(os.path.join(base_dir, "ego_pose"))
     print("[Loaded] ego_pose")
@@ -100,6 +113,9 @@ def load_waymo_raw(base_dir):
     print("[Loaded] extrinsics")
     sky_masks, mask_pth = load_sky_masks(os.path.join(base_dir, "sky_masks"))
     print("[Loaded] sky_masks")
+    SfM_clouds = load_SfM_clouds(os.path.join(base_dir, "colmap", "points3D.txt"))
+    print("[Loaded] SfM_clouds")
+
     return {
         "ego_pose": ego_pose,
         "lidar": lidar,
@@ -107,6 +123,7 @@ def load_waymo_raw(base_dir):
         "intrinsics": intrinsics,
         "extrinsics": extrinsics,
         "sky_mask": sky_masks,
+        "SfM_clouds": SfM_clouds,
         "others": None
     }
     

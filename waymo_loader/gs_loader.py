@@ -60,7 +60,7 @@ class SceneWaymo(Scene):
                     fl_x, fl_y, cx, cy = fl_x * resize_ratio, fl_y * resize_ratio, cx * resize_ratio, cy * resize_ratio
                 FovX, FovY = 2 * np.arctan(width / (2 * fl_x)), 2 * np.arctan(height / (2 * fl_y))
 
-                c2w = ego_pose[i] @ extrinsics[j] @ opencv2waymo # e2w * e2waymo * opencv2waymo
+                c2w = ego_pose[i] @ extrinsics[j] @ opencv2waymo # ego2world * waymo2ego * opencv2waymo
                 w2c = np.linalg.inv(c2w)
                 R = w2c[:3, :3].copy()
                 T = w2c[:3, 3].copy()
@@ -85,14 +85,74 @@ class SceneWaymo(Scene):
         self.test_cameras[args.resolution] = cameraList_from_camInfos(test_camera_raw, args.resolution, args)
         print("[Loaded] cameras")
 
+        #depth map
+        if not test and args.supervise_depth:
+        # if not test and args.supervise_depth:
+            # all_frame_points = []
+            # for frame in range(len(images)): # debug
+            #     homo_points = np.concatenate([lidar[frame]['points'], np.ones((lidar[frame]['points'].shape[0], 1))], axis=1)
+            #     homo_points = homo_points @ ego_pose[frame].T
+            #     points = homo_points / homo_points[:, 3, None]
+            #     all_frame_points.append(points)
+            # points = np.concatenate(all_frame_points) # points are in world coordination
+
+            # del all_frame_points
+            # points = torch.from_numpy(points).cuda()
+            # mask = np.random.randint(0, points.shape[0], points.shape[0]//50)
+            # points = points[mask]
+
+            for i in range(len(self.train_cameras[args.resolution])):
+                camera = self.train_cameras[args.resolution][i]
+                frame = frame_num[0] + i // args.camera_number
+                homo_points = np.concatenate([lidar[frame]['points'], np.ones((lidar[frame]['points'].shape[0], 1))], axis=1)
+                homo_points = homo_points @ ego_pose[frame].T
+                points = homo_points / homo_points[:, 3, None]
+                points = torch.from_numpy(points).cuda()
+
+                h, w = camera.image_height, camera.image_width
+                points_camera = points.float() @ camera.full_proj_transform.cuda()
+                points_camera = points_camera[:, :3] / points_camera[:, 3, None]
+                points_camera[:, 0] = ((points_camera[:, 0] + 1.0) * w - 1) * 0.5
+                points_camera[:, 1] = ((points_camera[:, 1] + 1.0) * h - 1) * 0.5
+                uvz = points_camera
+
+                # PVG 的方式 有bug
+                # K = torch.tensor([
+                #     [camera.fl_x, 0, camera.cx],
+                #     [0, camera.fl_y, camera.cy],
+                #     [0, 0, 1]
+                # ], dtype=torch.float32, device="cuda")
+                # points_camera = points.float() @ camera.world_view_transform.cuda()
+                # points_camera = points_camera[:, :3] / points_camera[:, 3, None]
+                # uvz = points_camera @ K.T
+                # uvz[:, :2] /= uvz[:, 2:]
+
+                uvz = uvz[uvz[:, 2] > 0]
+                uvz = uvz[uvz[:, 1] >= 0]
+                uvz = uvz[uvz[:, 1] < h]
+                uvz = uvz[uvz[:, 0] >= 0]
+                uvz = uvz[uvz[:, 0] < w]
+                uv = uvz[:, :2].to(torch.int32)
+
+                # deep test
+                pts_depth = torch.zeros([1, h, w], device="cuda") 
+                pts_depth[0, uv[:, 1], uv[:, 0]] = uvz[:, 2]
+                # uv = uvz[:, :2].to(torch.int32).cpu()
+                # depths = uvz[:, 2].cpu()
+                # for i in range(len(uv)):
+                #     u = uv[i, 0]
+                #     v = uv[i, 1]
+                #     z = depths[i]
+                #     if pts_depth[0, v, u] == 0 or z < pts_depth[0, v, u]:
+                #         pts_depth[0, v, u] = z
+                camera.depth_map = pts_depth.float().cpu()
+
+
         #gaussian
-        use_one_frame = False
-        if use_one_frame:
-            selected_frame = 0
-            homo_points = np.concatenate([lidar[selected_frame]['points'], np.ones((lidar[selected_frame]['points'].shape[0], 1))], axis=1)
-            homo_points = homo_points @ ego_pose[selected_frame].T
-            points = homo_points[:, :3] / homo_points[:, 3, None]
-        else:
+        
+        # LiDAR/SfM/random
+        mode = 2
+        if mode == 0:
             all_frame_points = []
             for frame in range(frame_num[0], frame_num[1]):
                 homo_points = np.concatenate([lidar[frame]['points'], np.ones((lidar[frame]['points'].shape[0], 1))], axis=1)
@@ -102,11 +162,26 @@ class SceneWaymo(Scene):
             points = np.concatenate(all_frame_points)
             mask = np.random.randint(0, points.shape[0], points.shape[0]//(frame_num[1] - frame_num[0]))
             points = points[mask]
-                
+            colors = np.random.rand(points.shape[0], 3) #[0, 1)a
+        elif mode == 1:        
+            SfM_clouds = waymo_raw_pkg["SfM_clouds"]
+            points = SfM_clouds[0]
+            colors = SfM_clouds[1] / 255.
+        elif mode == 2:
+            points_num  = 50_000
+            cam_centers = []
+            for cam in self.train_cameras[args.resolution]:
+                cam_centers.append(cam.camera_center)
+            cam_centers = torch.stack(cam_centers)
+            avg_center = cam_centers.mean(dim=0).numpy()
+            points = np.zeros((points_num, 3 ))
+            for i in range(3):
+                points[:, i] = np.random.uniform(avg_center[i] - self.cameras_extent * 0.1, avg_center[i] + self.cameras_extent * 0.1, size=points_num)
+            colors = np.random.rand(points_num, 3) #[0, 1)
+
         if points.shape[0] > args.num_pts:
             mask = np.random.randint(0, points.shape[0], args.num_pts)
             points = points[mask]
-        colors = np.random.rand(points.shape[0], 3) #[0, 1)
         pcd = BasicPointCloud(points, colors, normals=np.zeros((points.shape[0], 3)))
         self.gaussians.create_from_pcd(pcd, self.cameras_extent)
         print("[Loaded] guassians")
