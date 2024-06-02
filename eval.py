@@ -32,7 +32,7 @@ import numpy as np
 import math
 
 from utils.graphics_utils import BasicPointCloud
-from waymo_loader import load_waymo_data, load_street_waymo_data
+from waymo_loader import load_waymo_data
 from viewer.camera import CameraOffset
 
 def realtime_rendering(gaussians, model_params, background, scene, dirNum, fixed=False):        
@@ -103,6 +103,7 @@ def record_rendering(gaussians, pipeline, background, scene, dirNum):
     elif args.mode == 6:
         for frameCnt in range(0, len(cameraSet), dirNum):
             rendered = render(setView(cameraSet[frameCnt + viewDir][1]), gaussians, pipeline, background)["depth"].detach()[0]
+            #rendered = cameraSet[frameCnt + viewDir][1].depth_map[0] # debug
             rendered = rendered.cpu().numpy() 
             normalized_depth = (rendered - np.min(rendered)) / (np.max(rendered) - np.min(rendered))
             image = cv2.applyColorMap(np.uint8(normalized_depth * 255), cv2.COLORMAP_JET)

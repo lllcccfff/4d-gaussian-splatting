@@ -116,17 +116,6 @@ class SceneWaymo(Scene):
                 points_camera[:, 1] = ((points_camera[:, 1] + 1.0) * h - 1) * 0.5
                 uvz = points_camera
 
-                # PVG 的方式 有bug
-                # K = torch.tensor([
-                #     [camera.fl_x, 0, camera.cx],
-                #     [0, camera.fl_y, camera.cy],
-                #     [0, 0, 1]
-                # ], dtype=torch.float32, device="cuda")
-                # points_camera = points.float() @ camera.world_view_transform.cuda()
-                # points_camera = points_camera[:, :3] / points_camera[:, 3, None]
-                # uvz = points_camera @ K.T
-                # uvz[:, :2] /= uvz[:, 2:]
-
                 uvz = uvz[uvz[:, 2] > 0]
                 uvz = uvz[uvz[:, 1] >= 0]
                 uvz = uvz[uvz[:, 1] < h]
@@ -137,22 +126,20 @@ class SceneWaymo(Scene):
                 # deep test
                 pts_depth = torch.zeros([1, h, w], device="cuda") 
                 pts_depth[0, uv[:, 1], uv[:, 0]] = uvz[:, 2]
-                # uv = uvz[:, :2].to(torch.int32).cpu()
-                # depths = uvz[:, 2].cpu()
-                # for i in range(len(uv)):
-                #     u = uv[i, 0]
-                #     v = uv[i, 1]
-                #     z = depths[i]
-                #     if pts_depth[0, v, u] == 0 or z < pts_depth[0, v, u]:
-                #         pts_depth[0, v, u] = z
                 camera.depth_map = pts_depth.float().cpu()
 
 
         #gaussian
         
-        # LiDAR/SfM/random
-        mode = 2
+        # one LiDAR/simple LiDAR/SfM/random
+        mode = 0
         if mode == 0:
+            frame = 5
+            homo_points = np.concatenate([lidar[frame]['points'], np.ones((lidar[frame]['points'].shape[0], 1))], axis=1)
+            homo_points = homo_points @ ego_pose[frame].T
+            points = homo_points[:, :3] / homo_points[:, 3, None]
+            colors = np.random.rand(points.shape[0], 3) #[0, 1)a
+        elif mode == 1:
             all_frame_points = []
             for frame in range(frame_num[0], frame_num[1]):
                 homo_points = np.concatenate([lidar[frame]['points'], np.ones((lidar[frame]['points'].shape[0], 1))], axis=1)
